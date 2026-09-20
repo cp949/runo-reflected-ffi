@@ -3,11 +3,10 @@
 이 저장소의 발견 작업, 실행 계획과 진행 상태는 GitHub Issues(`cp949/runo-reflected-ffi`)에서
 관리한다. 모든 작업에 `gh` CLI를 사용한다.
 
-**현재 상태**: 로컬 저장소에 git remote가 아직 없다(git 이력 재초기화 예정).
-`packages/reflected-ffi/package.json`의 `repository`/`bugs` 필드가 가리키는
-`cp949/runo-reflected-ffi`가 목표 저장소다. remote가 없는 동안에는 `gh` 명령에
-`-R cp949/runo-reflected-ffi`를 명시하거나 `gh repo set-default cp949/runo-reflected-ffi`로
-기본 저장소를 지정한다.
+**현재 상태**: `origin`이 `https://github.com/cp949/runo-reflected-ffi.git`을
+가리키도록 설정돼 있다. 아직 push하지 않아 GitHub 쪽 저장소는 비어 있다(기본
+브랜치 없음). `gh` 명령은 `git remote -v`에서 저장소를 자동 추론하므로 `-R`
+플래그는 선택사항이다.
 
 ## 기본 명령
 
