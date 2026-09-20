@@ -37,20 +37,20 @@ export default (timeout: number) => {
 
     // read-through: key에 캐시된 값이 있으면 그대로 반환하고, 없으면 compute를
     // 호출해 값을 얻는다. compute가 캐싱해도 안전하다고 알려줄 때만 캐시에 저장한다.
+    // set()의 반환값(표준 Map 계약상 this)에는 기대지 않고 value를 직접 든다.
     readOr<V>(key: string | symbol, compute: () => [boolean, V]): V {
       if (this.has(key)) return this.get(key) as V;
       const [cache, value] = compute();
-      return cache ? this.set(key, value) : value;
+      if (cache) this.set(key, value);
+      return value;
     }
 
-    // @ts-expect-error — 표준 Map#set은 `this`를 반환하지만, 이 구현은 의도적으로
-    // 저장한 value를 그대로 반환한다. remote.ts의 Handler#get/#ownKeys/
-    // #getPrototypeOf 트랩이 `this.$.set(...)`의 반환값을 자신의 반환값으로
-    // 그대로 사용하므로 절대 `this`를 반환하도록 "고치면" 안 된다.
-    set<V>(key: string | symbol, value: V): V {
-      // @ts-expect-error super.set returns this (Memo), but set() expects Map
+    // 표준 Map#set 그대로 this를 반환한다. 저장과 동시에 만료 큐에 등록해
+    // "timeout 뒤 자동으로 비워지는 캐시"라는 불변식을, set()을 어디서
+    // 호출하든(현재는 readOr()뿐이지만 향후 직접 호출도) 지킨다.
+    set(key: string | symbol, value: unknown): this {
       set(super.set(key, value), key);
-      return value;
+      return this;
     }
   };
 };
