@@ -27,6 +27,7 @@ const worker = new Worker(new URL("./worker.ts", import.meta.url), {
 
 // local()이 아직 만들어지기 전에 브리지를 먼저 구성해야 해서, reflect는
 // 나중에 대입하는 변수로 선언하고 클로저로 참조만 넘긴다.
+// eslint-disable-next-line prefer-const -- 순환 초기화라 선언과 대입을 분리해야 한다.
 let reflect: Reflect;
 const bridge = createMainBridge(worker, {
   reflect: (method, uid, ...args) => reflect(method, uid, ...args),

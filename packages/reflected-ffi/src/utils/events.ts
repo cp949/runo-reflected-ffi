@@ -33,7 +33,7 @@ Reflect.defineProperty(EventTarget.prototype, "addEventListener", {
       // 표준 addEventListener 옵션에는 없는 필드이므로 전달 전에 제거한다.
       delete (options as InvokeOptions).invoke;
     }
-    return (addEventListener as Function).apply(this, arguments);
+    return addEventListener.apply(this, [type, callback, options]);
   },
 });
 

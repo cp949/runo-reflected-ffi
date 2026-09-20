@@ -216,6 +216,7 @@ export default (
     switch (typeof value) {
       case "object":
         if (value === null) break;
+      // 폴스루 — null이 아닌 object는 function과 동일하게 처리한다.
       case "function":
         return reflected in (value as object);
     }
@@ -442,6 +443,7 @@ export default (
     },
 
     // 주어진 콜백을 로컬 쪽에서 주어진 인자로 실행하고 결과를 돌려받는다.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- toJSONCallback도 임의의 콜백을 그대로 받는다.
     evaluate: (callback: Function, ...args: unknown[]): unknown =>
       fromValue(
         reflect(EVALUATE, null, toJSONCallback(callback), toValues(args)),

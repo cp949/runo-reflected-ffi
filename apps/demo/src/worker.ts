@@ -15,6 +15,7 @@ const worker = self as unknown as {
 
 // remote()가 아직 만들어지기 전에 브리지를 먼저 구성해야 해서, reflect는
 // 나중에 대입하는 변수로 선언하고 클로저로 참조만 넘긴다.
+// eslint-disable-next-line prefer-const -- 순환 초기화라 선언과 대입을 분리해야 한다.
 let reflect: Reflect;
 const bridge = createWorkerBridge(worker, {
   reflect: (method, uid, ...args) => reflect(method, uid, ...args),
@@ -27,6 +28,7 @@ reflect = remoteApi.reflect;
 
 // main 스레드의 globalThis를 가리키는 프록시. 이하 접근은 전부 동기
 // reflect(sendSync)를 통해 main 스레드로 왕복한다.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 임의의 전역 프로퍼티에 동적으로 접근한다.
 const theGlobal = remoteApi.global as Record<string, any>;
 
 worker.postMessage({

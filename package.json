@@ -12,10 +12,9 @@
     "release": "pnpm --filter @cp949/runo-reflected-ffi release"
   },
   "devDependencies": {
-    "@typescript/typescript6": "^6.0.2",
     "prettier": "3.9.8",
     "turbo": "^2.11.2",
-    "typescript": "7.0.2"
+    "typescript": "6.0.3"
   },
   "packageManager": "pnpm@11.25.0",
   "engines": {

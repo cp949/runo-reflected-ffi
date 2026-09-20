@@ -132,8 +132,8 @@ const inflate = (
           inflate(toTag(input), output, cache, ctx);
           input = (input as ArrayBufferView).buffer;
           if (!process(input, output, cache)) break;
-          // 폴스루 — 뷰의 내부 버퍼가 새 참조면 아래 ArrayBuffer 분기로
-          // 이어서 실제 바이트를 기록한다.
+          // 뷰의 내부 버퍼가 새 참조면 아래 ArrayBuffer 분기로 이어서 실제
+          // 바이트를 기록한다 — 폴스루.
         }
         case input instanceof ArrayBuffer: {
           const ui8a = new Uint8Array(input as ArrayBufferLike);
@@ -197,8 +197,8 @@ const inflate = (
           output.push(FILE);
           inflate(file.name, output, cache, ctx);
           inflate(file.lastModified, output, cache, ctx);
-          // 폴스루 — File은 Blob이기도 하므로 이어서 BLOB 데이터까지
-          // 기록한다.
+          // File은 Blob이기도 하므로 이어서 BLOB 데이터까지 기록한다 —
+          // 폴스루.
         }
         case input instanceof Blob: {
           const blob = input as Blob;

@@ -282,6 +282,7 @@ export default (
     },
 
     // 주어진 콜백을 주어진 인자로 호출해주는, 이식성 있는 API.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 임의의 콜백을 받아 그대로 apply한다.
     evaluate: (callback: Function, ...args: unknown[]): unknown =>
       apply(callback, null, args),
 

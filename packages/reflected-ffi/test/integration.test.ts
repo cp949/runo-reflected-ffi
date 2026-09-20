@@ -35,6 +35,7 @@ const runBattery = async ({
   remoteTimeout,
 }: Battery): Promise<void> => {
   const { there, here, array } = bootstrap({ localBuffer, remoteTimeout });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 테스트에서 임의의 전역 프로퍼티에 동적으로 접근한다.
   const theGlobal = there.global as Record<string, any>;
 
   // WeakRef/FinalizationRegistry uid 캐시가 실제로 상대에게 UNREF를 보내는지
@@ -216,6 +217,8 @@ const runBattery = async ({
   expect(there.isProxy(new theGlobal.Uint8Array([1, 2, 3]))).toBe(false);
   expect([...new theGlobal.Uint8Array([1, 2, 3])]).toEqual([1, 2, 3]);
 
+  // 대입 자체가 목적이다 — obj의 마지막 참조를 끊어야 아래 GC 단언이 성립한다.
+  // eslint-disable-next-line no-useless-assignment
   obj = null;
   theGlobal.trapped = null;
 

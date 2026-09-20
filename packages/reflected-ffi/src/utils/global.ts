@@ -27,6 +27,7 @@ export const toName = (
  * 반환한다. globalThis에 없으면 부모 생성자의 인스턴스를 만들어 그 태그로
  * 다시 찾는다(에러 서브클래스처럼 toStringTag가 상속되는 경우를 위함).
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- ref는 임의의 생성자/프로토타입 체인 노드라 구체 타입이 없다.
 export const toTag = (ref: any, name: string = ref[toStringTag]): string =>
   name in globalThis
     ? name
@@ -64,12 +65,14 @@ const ERROR_CLASSES = new Set([
 /** 허용 목록에 있는 이름으로만 TypedArray/DataView 생성자를 반환한다. 목록에 없으면 에러를 던진다. */
 export const resolveViewClass = (
   name: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TypedArray/DataView 생성자마다 시그니처가 달라 공통 타입이 없다.
 ): new (...args: any[]) => ArrayBufferView => {
   if (!VIEW_CLASSES.has(name))
     throw new Error(`reflected-ffi: unsupported view class "${name}"`);
   return (
     globalThis as unknown as Record<
       string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 위와 동일한 이유.
       new (...args: any[]) => ArrayBufferView
     >
   )[name]!;

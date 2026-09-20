@@ -22,4 +22,4 @@ export const IS_EXTENSIBLE = i++;
 export const OWN_KEYS = i++;
 export const PREVENT_EXTENSIONS = i++;
 export const SET = i++;
-export const SET_PROTOTYPE_OF = i++;
+export const SET_PROTOTYPE_OF = i;

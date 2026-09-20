@@ -43,4 +43,4 @@ export const BLOB = i++;
 export const FILE = i++;
 
 // 이미 인코딩한 참조를 다시 가리키는 백레퍼런스 태그 — 순환 참조를 복원한다.
-export const RECURSION = i++;
+export const RECURSION = i;

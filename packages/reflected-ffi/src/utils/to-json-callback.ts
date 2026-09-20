@@ -8,7 +8,9 @@
  * `this`로 콜백을 넘겨받아 `Function.prototype.toJSON`으로도 쓸 수 있다.
  */
 export default function toJSONCallback(
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- Function.prototype.toJSON을 흉내내려면 클래스까지 포괄하는 네이티브 Function 타입이 필요하다.
   this: Function | void,
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 위와 동일한 이유.
   callback: Function = this as Function,
 ): string {
   return String(callback).replace(

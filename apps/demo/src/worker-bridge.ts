@@ -82,7 +82,7 @@ export function createWorkerBridge(
       worker.postMessage([i32a, args]);
       // method가 UNREF(0)면 main이 응답을 쓰지 않으므로 기다릴 필요가 없다.
       if (args[0]) {
-        //@ts-ignore — Atomics.wait의 value 인자 생략은 원본과 동일 동작(undefined가 0으로 강제 변환됨)
+        //@ts-expect-error -- Atomics.wait의 value 인자 생략은 원본과 동일 동작(undefined가 0으로 강제 변환됨)
         Atomics.wait(i32a, 0);
         i32a[0] = 0;
         return decode(i32a[1] as number, i32a.buffer);

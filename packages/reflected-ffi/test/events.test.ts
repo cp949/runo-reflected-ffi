@@ -5,7 +5,7 @@ describe("utils/events", () => {
   it("invoke 옵션으로 등록된 메서드를 이벤트 객체에서 호출한다", () => {
     const target = new EventTarget();
     const preventDefault = vi.fn();
-    // @ts-expect-error
+    // @ts-expect-error -- invoke는 lib.dom.d.ts의 표준 AddEventListenerOptions에 없다.
     target.addEventListener("click", () => {}, { invoke: "preventDefault" });
 
     const event = new Event("click", { cancelable: true });
@@ -34,7 +34,7 @@ describe("utils/events", () => {
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
     target.addEventListener("click", () => {}, {
-      // @ts-expect-error
+      // @ts-expect-error -- invoke는 lib.dom.d.ts의 표준 AddEventListenerOptions에 없다.
       invoke: ["preventDefault", "stopPropagation"],
     });
 
