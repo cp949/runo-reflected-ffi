@@ -1,0 +1,22 @@
+{
+  "name": "runo-reflected-ffi",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "@typescript/typescript6": "^6.0.2",
+    "prettier": "3.9.8",
+    "turbo": "^2.11.2",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  }
+}
