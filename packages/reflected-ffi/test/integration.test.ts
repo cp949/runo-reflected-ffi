@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import local from "../src/local";
 import remote from "../src/remote";
+import { UNREF } from "../src/utils/traps";
 
 // local()은 timeout(memoize) 옵션이 없고, remote()는 buffer(direct 인코딩) 옵션이
 // 없다 — 두 필드는 이제 peer마다 독립된 설정이라 서로 맞출 필요 자체가 없다
@@ -35,6 +36,21 @@ const runBattery = async ({
 }: Battery): Promise<void> => {
   const { there, here, array } = bootstrap({ localBuffer, remoteTimeout });
   const theGlobal = there.global as Record<string, any>;
+
+  // WeakRef/FinalizationRegistry uid 캐시가 실제로 상대에게 UNREF를 보내는지
+  // 잠그는 스파이. reflect는 프로퍼티 조회 시점에 호출되므로 이후 교체해도
+  // FinalizationRegistry 콜백을 포함한 모든 호출을 잡는다.
+  let unrefCount = 0;
+  const origHereReflect = here.reflect.bind(here);
+  here.reflect = ((...args: Parameters<typeof origHereReflect>) => {
+    if (args[0] === UNREF) unrefCount++;
+    return origHereReflect(...args);
+  }) as typeof here.reflect;
+  const origThereReflect = there.reflect.bind(there);
+  there.reflect = ((...args: Parameters<typeof origThereReflect>) => {
+    if (args[0] === UNREF) unrefCount++;
+    return origThereReflect(...args);
+  }) as typeof there.reflect;
 
   theGlobal.trapped = function trap() {};
 
@@ -209,6 +225,11 @@ const runBattery = async ({
     /* --expose-gc might not be active in some runners */
   }
   await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // 마지막 참조가 끊긴 프록시/래퍼 함수가 실제로 GC돼 FinalizationRegistry가
+  // 상대에게 UNREF를 보냈는지 고정한다 — 이전에는 gc()만 호출하고 결과를
+  // 단언하지 않는 smoke-run이었다.
+  expect(unrefCount).toBeGreaterThanOrEqual(1);
 
   here.terminate();
 };
