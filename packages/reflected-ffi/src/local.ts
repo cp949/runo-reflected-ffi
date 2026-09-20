@@ -370,21 +370,11 @@ export default (
           return toValue(apply(fn, null, fromValues(args[1] as unknown[])));
         }
         // 여러 키(경로 포함 가능)를 한 번에 조회해 결과 배열로 돌려준다.
+        // 키 해석 규칙(문자열→query, symbol→bracket)은 utils/gather.ts가 갖고
+        // 있다 — 여기서는 wire 변환(fromKeys/toValue)만 감싼다.
         case GATHER: {
           const keys = fromKeys(args[0] as TypeValue[], weakRefs);
-          for (
-            let k: string | symbol | unknown, i = 0, length = keys.length;
-            i < length;
-            i++
-          ) {
-            k = keys[i];
-            (keys as unknown[])[i] = toValue(
-              typeof k === "string"
-                ? query(target, k)
-                : target[k as PropertyKey],
-            );
-          }
-          return keys;
+          return gather(target, ...keys).map(toValue);
         }
         case QUERY:
           return toValue(query(target, args[0] as string));
