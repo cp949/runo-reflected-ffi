@@ -55,6 +55,7 @@ import type { TypeValue } from "./utils/index";
 import gather from "./utils/gather";
 import query from "./utils/query";
 import heap from "./utils/heap";
+import getOrBuild from "./utils/uid-cache";
 
 // DOM이 없는 환경(Node.js 등)에서도 `instanceof Node` 검사가 안전하게
 // 동작하도록, 없으면 아무것도 매칭되지 않는 더미 클래스를 대신 쓴다.
@@ -191,15 +192,12 @@ export default (
       case FUNCTION: {
         // 원격 함수(uid=v)마다 로컬 프록시 함수를 하나만 만들어 WeakRef로
         // 캐싱한다. 프록시가 GC되면 FinalizationRegistry(fr)가 원격에 UNREF를
-        // 보내 정리한다.
-        let wr = weakRefs.get(v);
-        let fn = wr?.deref() as
-          ((...args: unknown[]) => Promise<unknown>) | undefined;
-        if (!fn) {
-          /* c8 ignore start */
-          if (wr) fr.unregister(wr);
-          /* c8 ignore stop */
-          fn = function (this: unknown, ...args: unknown[]): Promise<unknown> {
+        // 보내 정리한다 — 안무 자체는 utils/uid-cache.ts가 갖고 있다.
+        return getOrBuild(weakRefs, fr, v, function build() {
+          return function (
+            this: unknown,
+            ...args: unknown[]
+          ): Promise<unknown> {
             remote.apply(this, args);
 
             // 비동기로 reflect되는 값은 문자열화해서 넘기지 않는다 — 이 경로에
@@ -211,11 +209,7 @@ export default (
             const result = reflect(APPLY, v, toValue(this), args);
             return result.then(fromValue);
           };
-          wr = new WeakRef(fn);
-          weakRefs.set(v, wr);
-          fr.register(fn, v, wr);
-        }
-        return fn;
+        });
       }
       case SYMBOL:
         return fromSymbol(v as string);

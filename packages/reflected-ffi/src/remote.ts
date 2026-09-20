@@ -58,6 +58,7 @@ import gather from "./utils/gather";
 import query from "./utils/query";
 import heap from "./utils/heap";
 import memo from "./utils/memo";
+import getOrBuild from "./utils/uid-cache";
 
 export type RemoteOptions = {
   /** 원격 리시버를 거쳐 연산을 전달하는 함수. 모든 `Reflect` 메서드와 `unref`를 지원 */
@@ -195,30 +196,20 @@ export default (
   );
 
   // local 쪽 참조(uid=v)마다 Proxy를 하나만 만들어 WeakRef로 캐싱한다.
-  // 함수 계열(REMOTE_FUNCTION)은 FunctionHandler, 그 외는 Handler를 쓴다.
-  const asProxy = (t: number, v: unknown): object => {
-    let wr = weakRefs.get(v);
-    let proxy = wr?.deref();
-    if (!proxy) {
-      /* c8 ignore start */
-      if (wr) fr.unregister(wr);
-      /* c8 ignore stop */
-      if (t === REMOTE_FUNCTION)
-        proxy = new Proxy(
-          callback,
-          new FunctionHandler(t, v) as ProxyHandler<typeof callback>,
-        );
-      else
-        proxy = new Proxy(
-          t === REMOTE_OBJECT ? object : array,
-          new Handler(t, v) as ProxyHandler<typeof object>,
-        );
-      wr = new WeakRef(proxy);
-      weakRefs.set(v, wr);
-      fr.register(proxy, v, wr);
-    }
-    return proxy;
-  };
+  // 함수 계열(REMOTE_FUNCTION)은 FunctionHandler, 그 외는 Handler를 쓴다 —
+  // 캐싱 안무 자체는 utils/uid-cache.ts가 갖고 있다.
+  const asProxy = (t: number, v: unknown): object =>
+    getOrBuild(weakRefs, fr, v, () =>
+      t === REMOTE_FUNCTION
+        ? new Proxy(
+            callback,
+            new FunctionHandler(t, v) as ProxyHandler<typeof callback>,
+          )
+        : new Proxy(
+            t === REMOTE_OBJECT ? object : array,
+            new Handler(t, v) as ProxyHandler<typeof object>,
+          ),
+    );
 
   // 주어진 값이 이 remote가 만든(local 쪽 참조를 감싼) 프록시인지 확인한다.
   const isProxy = (value: unknown): boolean => {
