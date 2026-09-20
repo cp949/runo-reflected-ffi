@@ -31,12 +31,16 @@ describe("local() 반환 API 표면", () => {
     expect(() => here.terminate()).not.toThrow();
   });
 
-  it('reflect(GET, null, [DIRECT, "Math"])는 globalThis.Math를 REMOTE_OBJECT wire pair로 감싸 돌려준다', () => {
+  it('reflect(GET, null, [DIRECT, "Math"])는 항상 [shouldCache, [type, id]] 2-tuple을 돌려준다', () => {
+    // GET 응답 모양은 local 쪽 설정에 좌우되지 않는다 — local()은 remote가
+    // 무엇으로 붙을지 알 수 없으므로, peer 간 설정이 어긋나도 wire가 깨지지
+    // 않도록 항상 같은 모양으로 응답한다(ADR-0007).
     const here = local();
-    // memoize(timeout 기본값 -1)가 꺼져 있으므로 결과가 [cache, value] 쌍이 아니라 값(wire pair) 자체다.
     const result = here.reflect(GET, null, [DIRECT, "Math"]);
     expect(Array.isArray(result)).toBe(true);
-    const [type, id] = result as [number, number];
+    const [shouldCache, wirePair] = result as [boolean, [number, number]];
+    expect(typeof shouldCache).toBe("boolean");
+    const [type, id] = wirePair;
     expect(type).toBe(REMOTE_OBJECT);
     expect(typeof id).toBe("number");
   });

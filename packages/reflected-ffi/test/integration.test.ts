@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import local from "../src/local";
 import remote from "../src/remote";
 
-type Battery = { timeout: number; buffer: boolean };
+// local()은 timeout(memoize) 옵션이 없고, remote()는 buffer(direct 인코딩) 옵션이
+// 없다 — 두 필드는 이제 peer마다 독립된 설정이라 서로 맞출 필요 자체가 없다
+// (ADR-0007). Battery는 그 독립성을 그대로 드러낸다.
+type Battery = { localBuffer: boolean; remoteTimeout: number };
 
-const bootstrap = ({ timeout, buffer }: Battery) => {
+const bootstrap = ({ localBuffer, remoteTimeout }: Battery) => {
   const array = [1, 2, 3];
 
   const there: ReturnType<typeof remote> = remote({
-    timeout,
-    buffer,
+    timeout: remoteTimeout,
     reflect: (...args: Parameters<ReturnType<typeof local>["reflect"]>) =>
       here.reflect(...args),
     transform: (value: unknown) =>
@@ -17,8 +19,7 @@ const bootstrap = ({ timeout, buffer }: Battery) => {
   });
 
   const here: ReturnType<typeof local> = local({
-    timeout,
-    buffer,
+    buffer: localBuffer,
     reflect: (...args: Parameters<ReturnType<typeof remote>["reflect"]>) =>
       there.reflect(...args),
     transform: (value: unknown) =>
@@ -28,8 +29,11 @@ const bootstrap = ({ timeout, buffer }: Battery) => {
   return { there, here, array };
 };
 
-const runBattery = async ({ timeout, buffer }: Battery): Promise<void> => {
-  const { there, here, array } = bootstrap({ timeout, buffer });
+const runBattery = async ({
+  localBuffer,
+  remoteTimeout,
+}: Battery): Promise<void> => {
+  const { there, here, array } = bootstrap({ localBuffer, remoteTimeout });
   const theGlobal = there.global as Record<string, any>;
 
   theGlobal.trapped = function trap() {};
@@ -205,26 +209,36 @@ const runBattery = async ({ timeout, buffer }: Battery): Promise<void> => {
 };
 
 describe("local ↔ remote 통합 (원본 test/index.js + test/buffer.js 이식)", () => {
+  // local의 buffer와 remote의 timeout은 서로 다른 관심사라 맞춰 설정할 필요가
+  // 없다(ADR-0007) — 이 매트릭스는 그 독립성 자체를 검증한다. 특히 마지막 케이스는
+  // 이전엔 원본 코드가 "두 peer가 같은 값을 쓴다"고 가정해 한 번도 테스트되지 않았던
+  // 조합이다: local이 direct 버퍼 인코딩을 쓰면서 동시에 remote가 GET 결과를
+  // 캐싱하는 경우.
   it.each([
     {
-      label: "buffer:false, memoize 없음 (timeout=-1)",
-      timeout: -1,
-      buffer: false,
+      label: "local buffer:false, remote timeout:-1(캐시 없음)",
+      localBuffer: false,
+      remoteTimeout: -1,
     },
     {
-      label: "buffer:false, memoize 있음 (timeout=1)",
-      timeout: 1,
-      buffer: false,
+      label: "local buffer:false, remote timeout:1(캐시 있음)",
+      localBuffer: false,
+      remoteTimeout: 1,
     },
     {
-      label: "buffer:true, memoize 없음 (timeout=-1)",
-      timeout: -1,
-      buffer: true,
+      label: "local buffer:true, remote timeout:-1(캐시 없음)",
+      localBuffer: true,
+      remoteTimeout: -1,
+    },
+    {
+      label: "local buffer:true, remote timeout:1(캐시 있음) — 이전엔 검증된 적 없는 조합",
+      localBuffer: true,
+      remoteTimeout: 1,
     },
   ])(
     "$label",
-    async ({ timeout, buffer }) => {
-      await runBattery({ timeout, buffer });
+    async ({ localBuffer, remoteTimeout }) => {
+      await runBattery({ localBuffer, remoteTimeout });
     },
     10_000,
   );

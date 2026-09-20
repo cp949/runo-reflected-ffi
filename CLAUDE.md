@@ -29,6 +29,11 @@
 - 공개 export는 17개 subpath로 고정돼 있다. 원본에 있던 `./evaluate`,
   `./utils/view`는 죽은 export였고 의도적으로 제외했다
   ([ADR-0006](./docs/adr/0006-public-export-surface-excludes-two-dead-upstream-exports.md)).
+- GET 트랩 응답과 VIEW/BUFFER 페이로드는 self-describing이다 — local의
+  GET은 항상 `[shouldCache, [type, value]]`를 반환하고, `BufferDetails`는
+  `[isDirect, value, maxByteLength]`로 인코딩 방식을 스스로 담는다. peer별
+  옵션(local의 `timeout`, remote의 `buffer`)으로 wire 모양을 추측하지 않는다
+  ([ADR-0007](./docs/adr/0007-self-describing-wire-tags-for-cross-peer-options.md)).
 
 ## 검증
 

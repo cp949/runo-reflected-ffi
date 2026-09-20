@@ -68,9 +68,6 @@ export type RemoteOptions = {
   /** 참조가 해제될 때 호출되는 함수 */
   released?: (value: unknown) => unknown;
 
-  /** true면 JSON 호환을 깨더라도 버퍼를 직접(direct) 역직렬화하도록 허용 */
-  buffer?: boolean;
-
   /** 원격 값을 캐싱할 수 있을 때 유지할 시간(ms). `-1`이면 캐싱하지 않음 */
   timeout?: number;
 };
@@ -101,7 +98,6 @@ export default (
     ) => unknown,
     transform = identity,
     released = identity,
-    buffer = false,
     timeout = -1,
   }: RemoteOptions = object as RemoteOptions,
 ) => {
@@ -125,9 +121,9 @@ export default (
       case BIGINT:
         return BigInt(v as string);
       case VIEW:
-        return fromView(v as never, buffer);
+        return fromView(v as never);
       case BUFFER:
-        return fromBuffer(v as never, buffer);
+        return fromBuffer(v as never);
       // there is no other case
     }
   };
@@ -254,14 +250,18 @@ export default (
 
     get(_: object, key: PropertyKey): unknown {
       const k = key as string | symbol;
-      if (!memoize) return fromValue(reflect(GET, this.v, toKey(k)));
-      return this.$!.readOr(k, () => {
+      // local의 GET은 자신의 timeout과 무관하게 항상 [shouldCache, wireValue]를
+      // 돌려준다(ADR-0007) — 여기서도 memoize 여부와 무관하게 항상 destructure한다.
+      // reflect 호출 자체는 compute 안에 남겨, memoize가 켜져 있고 캐시 hit이면
+      // 아예 호출되지 않게(lazy) 유지한다.
+      const compute = (): [boolean, unknown] => {
         const [cache, value] = reflect(GET, this.v, toKey(k)) as [
           boolean,
           unknown,
         ];
         return [cache, fromValue(value)];
-      });
+      };
+      return memoize ? this.$!.readOr(k, compute) : compute()[1];
     }
 
     set(_: object, key: PropertyKey, value: unknown): boolean {

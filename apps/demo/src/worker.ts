@@ -21,7 +21,6 @@ const bridge = createWorkerBridge(worker, {
 });
 
 const remoteApi = remote({
-  buffer: true,
   reflect: (...args: unknown[]) => bridge.sendSync(args),
 });
 reflect = remoteApi.reflect;

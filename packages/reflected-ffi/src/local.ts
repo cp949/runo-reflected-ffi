@@ -129,9 +129,6 @@ export type LocalOptions = {
 
   /** true면 JSON 호환을 깨더라도 버퍼를 직접(direct) 직렬화하도록 허용 */
   buffer?: boolean;
-
-  /** 원격 값을 캐싱할 수 있을 때 유지할 시간(ms). `-1`이면 캐싱하지 않음 */
-  timeout?: number;
 };
 
 /**
@@ -159,7 +156,6 @@ export default (
     remote = identity,
     module = (name: string) => import(/* @vite-ignore */ name),
     buffer = false,
-    timeout = -1,
   }: LocalOptions = object as LocalOptions,
 ) => {
   // 와이어에서 받은 TypeValue를 로컬에서 쓸 수 있는 실제 값으로 되돌린다.
@@ -263,7 +259,6 @@ export default (
   // 원격에 노출한 로컬 참조(객체/함수)와 uid를 양방향으로 보관하는 heap.
   const { clear, id, ref, unref } = heap();
 
-  const memoize = -1 < timeout;
   // FUNCTION 케이스에서 uid별로 만든 로컬 프록시 함수를 보관하는 캐시.
   const weakRefs = new Map<unknown, WeakRef<object>>();
   const globalTarget = tv(OBJECT, null);
@@ -310,9 +305,10 @@ export default (
           // 전역 대상에서 "import"를 조회하면 실제 프로퍼티 대신 module() 콜백을 넘긴다.
           const asModule = isGlobal && key === "import";
           const value = asModule ? module : get(target, key);
-          const result = toValue(value);
-          if (!memoize) return result;
-          return [shouldCache(target, key, asModule), result];
+          // remote가 이 값을 캐싱해도 되는지는 remote의 timeout 설정과 무관하게
+          // 항상 계산해서 함께 보낸다 — GET 응답 모양이 local 쪽 설정에 좌우되면
+          // peer 간 설정이 어긋날 때 wire가 깨진다(ADR-0007).
+          return [shouldCache(target, key, asModule), toValue(value)];
         }
         case APPLY: {
           const map = new Map();

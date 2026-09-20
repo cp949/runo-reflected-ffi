@@ -4,10 +4,12 @@ import { fromArray } from "./index";
 // ArrayBuffer/TypedArray/DataView를 와이어로 주고받을 수 있는 튜플로
 // 바꾸거나(toBuffer/toView) 되돌린다(fromBuffer/fromView). `direct`는 direct
 // 코덱(이진 전송, ArrayBufferLike를 그대로 옮길 수 있음)인지, 아니면 JSON류
-// 경로(숫자 배열로 풀어야 함)인지를 가른다.
+// 경로(숫자 배열로 풀어야 함)인지를 가른다 — encode 쪽(toBuffer/toView)만 옵션으로
+// 받고, decode 쪽(fromBuffer/fromView)은 인코딩된 값에 함께 실린 `direct` 필드를
+// 그대로 따른다. peer 두 쪽이 서로 다른 buffer 옵션으로 연결돼도 옳게 디코딩된다.
 
-/** [버퍼 내용(direct면 ArrayBufferLike 그대로, 아니면 숫자 배열), maxByteLength(resizable 아니면 0)]. */
-export type BufferDetails = [ArrayBufferLike | number[], number];
+/** [direct 여부(페이로드 모양을 결정한 값 — decode가 옵션 대신 이 필드를 따른다), 버퍼 내용(direct면 ArrayBufferLike 그대로, 아니면 숫자 배열), maxByteLength(resizable 아니면 0)]. */
+export type BufferDetails = [boolean, ArrayBufferLike | number[], number];
 
 /** [뷰의 클래스 이름(toTag), 버퍼 정보, byteOffset, length(기본 길이면 0)]. */
 export type ViewDetails = [string, BufferDetails, number, number];
@@ -16,11 +18,14 @@ export type ViewDetails = [string, BufferDetails, number, number];
 const resizable = (length: number, maxByteLength: number): ArrayBufferLike =>
   new ArrayBuffer(length, { maxByteLength });
 
-/** 와이어에서 받은 `BufferDetails`로부터 원래의 ArrayBufferLike를 복원한다. */
-export const fromBuffer = (
-  [value, maxByteLength]: BufferDetails,
-  direct: boolean,
-): ArrayBufferLike => {
+/** 와이어에서 받은 `BufferDetails`로부터 원래의 ArrayBufferLike를 복원한다. 어느
+ * 모양으로 인코딩됐는지는 옵션이 아니라 `BufferDetails`의 `direct` 필드가 스스로
+ * 말해준다 — encode 쪽과 decode 쪽이 서로 다른 buffer 옵션으로 붙어도 안전하다. */
+export const fromBuffer = ([
+  direct,
+  value,
+  maxByteLength,
+]: BufferDetails): ArrayBufferLike => {
   const length = direct
     ? (value as ArrayBufferLike).byteLength
     : (value as number[]).length;
@@ -44,11 +49,13 @@ export const fromBuffer = (
 };
 
 /** 와이어에서 받은 `ViewDetails`로부터 원래의 TypedArray/DataView를 복원한다. */
-export const fromView = (
-  [name, args, byteOffset, length]: ViewDetails,
-  direct: boolean,
-): ArrayBufferView => {
-  const buffer = fromBuffer(args, direct);
+export const fromView = ([
+  name,
+  args,
+  byteOffset,
+  length,
+]: ViewDetails): ArrayBufferView => {
+  const buffer = fromBuffer(args);
   const Class = resolveViewClass(name) as new (
     buffer: ArrayBufferLike,
     byteOffset: number,
@@ -64,6 +71,7 @@ export const toBuffer = (
   value: ArrayBufferLike,
   direct: boolean,
 ): BufferDetails => [
+  direct,
   direct ? value : fromArray(new Uint8Array(value)),
   // `value`는 (toView가 넘기는 TypedArray의 buffer를 통해) SharedArrayBuffer일
   // 수도 있는데, SharedArrayBuffer에는 `resizable` 프로퍼티가 없다 — 이 캐스트는
