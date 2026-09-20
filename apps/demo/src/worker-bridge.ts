@@ -1,9 +1,14 @@
 // worker 쪽 브리지. main으로 보내는 동기 reflect 호출(sendSync)과, main이
 // 비동기 postMessage로 걸어오는 reflect 호출에 대한 응답을 함께 처리한다.
+// 와이어 envelope 모양(응답 튜플 조립, 에러 직렬화)은 ./protocol이 담당하고,
+// 이 파일은 전송(Atomics/SharedArrayBuffer)만 다룬다.
 
 import { decoder } from "@cp949/runo-reflected-ffi/decoder";
-import { APPLY } from "@cp949/runo-reflected-ffi/traps";
-import { PAYLOAD_BYTE_OFFSET } from "./protocol";
+import {
+  buildAsyncFailureReply,
+  buildAsyncSuccessReply,
+  PAYLOAD_BYTE_OFFSET,
+} from "./protocol";
 
 // self(WorkerGlobalScope)를 대체 가능하게 하기 위한 최소 인터페이스 —
 // postMessage/addEventListener만 있으면 된다(테스트 대역으로도 대체 가능).
@@ -48,29 +53,18 @@ export function createWorkerBridge(
 
   // main이 비동기(postMessage)로 건 reflect 호출을 처리하고 결과를 그대로
   // 돌려보낸다. deps.reflect(...)가 reject하면(원격에 노출한 콜백이 실행 중
-  // 던진 예외) [id, false, ...]로 실패를 왕복시켜, main의 sendAsync Promise가
-  // 응답 없이 영원히 미해결로 남지 않고 실제로 reject하게 한다. UNREF는
-  // 아무도 결과를 기다리지 않으므로(local.ts의 FinalizationRegistry 콜백이
-  // fire-and-forget으로 호출) 실패해도 그대로 삼킨다 — reject로 돌려보내 봐야
-  // 소비하는 곳이 없어 새 unhandled rejection만 남는다.
+  // 던진 예외) 실패를 왕복시켜, main의 sendAsync Promise가 응답 없이 영원히
+  // 미해결로 남지 않고 실제로 reject하게 한다(buildAsyncFailureReply가 UNREF는
+  // 예외적으로 삼킨다).
   worker.addEventListener(
     "message",
     async ({ data }: MessageEvent<[number, unknown[]]>) => {
       const [id, args] = data;
       try {
         const value = await deps.reflect(...(args as Parameters<Reflect>));
-        worker.postMessage([id, true, value]);
+        worker.postMessage(buildAsyncSuccessReply(id, value));
       } catch (err) {
-        if (args[0] !== APPLY) {
-          worker.postMessage([id, true, undefined]);
-          return;
-        }
-        const error = err instanceof Error ? err : new Error(String(err));
-        worker.postMessage([
-          id,
-          false,
-          { name: error.name, message: error.message, stack: error.stack },
-        ]);
+        worker.postMessage(buildAsyncFailureReply(id, args[0] as number, err));
       }
     },
   );

@@ -1,11 +1,15 @@
 // main 스레드 쪽 브리지. worker에 보내는 비동기 요청(sendAsync)과, worker가
 // SharedArrayBuffer + Atomics로 동기로 걸어오는 reflect 호출에 대한 응답을
-// 함께 처리한다.
+// 함께 처리한다. 와이어 envelope 모양(응답 튜플 조립/해체, 에러 직렬화,
+// GET-wrap 결정)은 ./protocol이 담당하고, 이 파일은 전송(Atomics/SharedArrayBuffer)만 다룬다.
 
 import { encoder } from "@cp949/runo-reflected-ffi/encoder";
-import { GET } from "@cp949/runo-reflected-ffi/traps";
 import nextResolver from "./next-resolver";
-import { PAYLOAD_BYTE_OFFSET } from "./protocol";
+import {
+  buildSyncErrorPayload,
+  classifyMainMessage,
+  PAYLOAD_BYTE_OFFSET,
+} from "./protocol";
 
 /** local()/remote()의 reflect 콜백과 동일한 시그니처. 브리지가 그대로 감싸 전달한다. */
 export type Reflect = (
@@ -46,63 +50,44 @@ export function createMainBridge(
     Atomics.notify(i32a, 0);
   };
 
-  // worker-bridge.ts가 async reflect 실패를 왕복시킬 때 쓰는 {name, message,
-  // stack} 평범한 객체를 Error 인스턴스로 되살린다 — 이 채널은 postMessage
-  // 구조적 복제에 기대므로, floor(Chrome 84/Firefox 79, ADR-0001)에서
-  // 보장되지 않는 네이티브 Error 클론에 기대지 않는다.
-  const toError = (payload: unknown): Error => {
-    const { name, message, stack } = payload as {
-      name?: string;
-      message?: string;
-      stack?: string;
-    };
-    return Object.assign(new Error(message), { name, stack });
-  };
-
   // worker가 보낸 메시지를 종류별로 분기해 처리한다.
   worker.onmessage = ({ data }: MessageEvent) => {
-    if (!Array.isArray(data)) {
-      // 배열이 아니면 상태 로그 메시지다.
-      const status = data as { type?: string; text?: string } | null;
-      if (status?.type === "status") deps.onStatus(String(status.text));
-      return;
-    }
-    const [first] = data as [Int32Array | number, ...unknown[]];
-    if (typeof first === "number") {
-      // 첫 요소가 숫자(id)면 sendAsync로 보낸 비동기 요청의 응답이다 —
-      // worker-bridge.ts가 [id, ok, payload]로 보낸다(ok=false면 payload는
-      // 위 {name, message, stack} 모양).
-      const [, ok, payload] = data as [number, boolean, unknown];
-      settle(first, ok, ok ? payload : toError(payload));
-      return;
-    }
-    // 그 외에는 worker가 동기로 건 reflect 호출이다 — 결과를 처리한 뒤
-    // 공유 버퍼에 써서 Atomics.notify로 worker의 Atomics.wait를 깨운다.
-    const [, args] = data as [Int32Array, unknown[]];
-    const i32a = first;
-    const result = deps.reflect(...(args as Parameters<Reflect>));
-    // method가 UNREF(0)면 worker가 응답을 기다리지 않으므로 쓰지 않는다.
-    if (!args[0]) return;
-    const encoded = encode(result, i32a.buffer);
-    if (encoded instanceof Promise) {
-      // result에 Blob/File이 섞이면 encode()가 바이트를 다 채운 뒤에야
-      // 끝나는 Promise를 돌려준다 — resolve될 때까지 notify를 미룬다.
-      encoded.then(
-        (length) => notify(i32a, length),
-        (err: unknown) => {
-          // Blob/File 바이트 읽기 실패. worker의 Atomics.wait는 타임아웃이
-          // 없어 notify를 안 보내면 워커 스레드가 영구 정지하므로, 실패도
-          // 반드시 notify한다. GET의 응답 슬롯은 [cache, value] 2-tuple이어야
-          // 구조분해가 성공하고(remote.ts의 Handler#get), 그 외(APPLY 등)는
-          // remote.ts의 fromValue가 배열이 아닌 값을 그대로 통과시키므로
-          // (isArray 검사 실패 시 원값 반환) 감싸지 않는다.
-          const error = err instanceof Error ? err : new Error(String(err));
-          const payload = args[0] === GET ? [false, error] : error;
-          notify(i32a, encode(payload, i32a.buffer) as number);
-        },
-      );
-    } else {
-      notify(i32a, encoded);
+    const msg = classifyMainMessage(data);
+    switch (msg.kind) {
+      case "status":
+        deps.onStatus(msg.text);
+        return;
+      case "asyncReply":
+        // sendAsync로 보낸 비동기 요청의 응답이다.
+        settle(msg.id, msg.ok, msg.value);
+        return;
+      case "syncCall": {
+        // worker가 동기로 건 reflect 호출이다 — 결과를 처리한 뒤 공유
+        // 버퍼에 써서 Atomics.notify로 worker의 Atomics.wait를 깨운다.
+        const { i32a, args } = msg;
+        const result = deps.reflect(...(args as Parameters<Reflect>));
+        // method가 UNREF(0)면 worker가 응답을 기다리지 않으므로 쓰지 않는다.
+        if (!args[0]) return;
+        const encoded = encode(result, i32a.buffer);
+        if (encoded instanceof Promise) {
+          // result에 Blob/File이 섞이면 encode()가 바이트를 다 채운 뒤에야
+          // 끝나는 Promise를 돌려준다 — resolve될 때까지 notify를 미룬다.
+          encoded.then(
+            (length) => notify(i32a, length),
+            (err: unknown) => {
+              // Blob/File 바이트 읽기 실패. worker의 Atomics.wait는 타임아웃이
+              // 없어 notify를 안 보내면 워커 스레드가 영구 정지하므로, 실패도
+              // 반드시 notify한다.
+              const error = err instanceof Error ? err : new Error(String(err));
+              const payload = buildSyncErrorPayload(args[0] as number, error);
+              notify(i32a, encode(payload, i32a.buffer) as number);
+            },
+          );
+        } else {
+          notify(i32a, encoded);
+        }
+        return;
+      }
     }
   };
 
