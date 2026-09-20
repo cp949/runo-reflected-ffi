@@ -16,11 +16,8 @@
 
 ## 등록 상태
 
-**부분 등록.** `gh label list --repo cp949/runo-reflected-ffi`로 확인한 결과,
-GitHub가 저장소 생성 시 기본으로 만드는 라벨(`wontfix` 포함)만 있고
-`needs-triage`/`needs-info`/`ready-for-agent`/`ready-for-human` 4개는 아직
-없다. 아래 명령으로 등록하고, 등록 여부를 `gh label list`로 재확인해 이 절을
-갱신한다.
+**등록 완료.** 다섯 라벨 모두 `cp949/runo-reflected-ffi`에 존재한다
+(`wontfix`는 GitHub 기본 라벨, 나머지 4개는 아래 명령으로 등록했다).
 
 ```bash
 gh label create needs-triage    -c fbca04 -d "관리자가 이슈를 검토해야 함"
