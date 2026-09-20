@@ -192,6 +192,11 @@ const runBattery = async ({
   expect(there.gather(obj, "value")[0]).toBe(1);
   expect(there.gather(obj, "value").length).toBe(1);
 
+  // non-proxy target에 dotted-path 문자열 키를 넘기면 there.gather도
+  // here.gather처럼 query()로 경로를 해석해야 한다(bracket 전용 접근 금지).
+  obj = there.assign({}, { nested: { value: 5 } });
+  expect(there.gather(obj, "nested.value")[0]).toBe(5);
+
   expect(there.isProxy(new theGlobal.Uint8Array([1, 2, 3]))).toBe(false);
   expect([...new theGlobal.Uint8Array([1, 2, 3])]).toEqual([1, 2, 3]);
 

@@ -54,6 +54,7 @@ import {
 import type { TypeValue } from "./utils/index";
 
 import toJSONCallback from "./utils/to-json-callback";
+import gather from "./utils/gather";
 import query from "./utils/query";
 import heap from "./utils/heap";
 import memo from "./utils/memo";
@@ -455,21 +456,17 @@ export default (
         reflect(EVALUATE, null, toJSONCallback(callback), toValues(args)),
       ),
 
-    // target이 프록시면 GATHER로 로컬에서 한 번에 조회하고, 아니면 로컬 값에서 직접 읽는다.
+    // target이 프록시면 GATHER로 로컬에서 한 번에 조회하고, 아니면
+    // utils/gather.ts로 로컬 값에서 직접 조회한다(문자열 키는 query() 경로
+    // 해석, symbol 키는 bracket — .query()와 같은 규칙).
     gather(target: unknown, ...keys: (string | symbol)[]): unknown[] {
-      const asProxy = isProxy(target);
-      const asValue = asProxy
-        ? fromValue
-        : (key: string | symbol) =>
-            (target as Record<string | symbol, unknown>)[key];
-      const resolvedKeys: (string | symbol)[] = asProxy
-        ? (reflect(GATHER, reference![1], toKeys(keys, weakRefs)) as (
-            string | symbol
-          )[])
-        : keys;
+      if (!isProxy(target)) return gather(target, ...keys);
+      const resolvedKeys = reflect(GATHER, reference![1], toKeys(keys, weakRefs)) as (
+        string | symbol
+      )[];
       const result: unknown[] = resolvedKeys.slice();
       for (let i = 0; i < result.length; i++)
-        result[i] = asValue(result[i] as string | symbol);
+        result[i] = fromValue(result[i]);
       return result;
     },
 
