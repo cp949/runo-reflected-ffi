@@ -39,6 +39,14 @@ import { toTag } from "../utils/global";
 
 type Cache = Map<unknown, number[]>;
 type Output = { push(...values: number[]): number; length: number };
+type PushView = (output: Stack, value: Uint8Array) => void;
+/**
+ * Blob/File 바이트는 비동기로 읽어야 해서 encode() 호출이 끝난 뒤에 채워
+ * 넣는다. 이 상태가 모듈 전역이면 겹치는 두 호출이 서로의 큐를 훔쳐 쓴다
+ * (call B가 call A의 미해결 Promise를 자신의 버퍼에 잘못된 offset으로
+ * 써버림) — 그래서 호출마다 새로 만들어 inflate()에 실어 나른다.
+ */
+type Ctx = { blobs: Promise<[number, ArrayBuffer]>[]; pushView: PushView };
 
 const { isNaN, isFinite, isInteger } = Number;
 const { ownKeys } = Reflect;
@@ -70,7 +78,12 @@ const set = (output: Output, type: number, length: number): void => {
  * 값 하나를 태그 + 데이터 형태로 출력에 기록한다 — direct 코덱 인코딩의
  * 본체. 객체/배열 등 컨테이너는 재귀 호출로 내부 값을 이어서 기록한다.
  */
-const inflate = (input: unknown, output: Output, cache: Cache): void => {
+const inflate = (
+  input: unknown,
+  output: Output,
+  cache: Cache,
+  ctx: Ctx,
+): void => {
   switch (typeof input) {
     case "number": {
       // 유한하고 0~255 범위인 정수는 UI8 한 바이트로, 그 외 유한수는
@@ -110,12 +123,13 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
           const arr = input as unknown[];
           const length = arr.length;
           set(output, ARRAY, length);
-          for (let i = 0; i < length; i++) inflate(arr[i], output, cache);
+          for (let i = 0; i < length; i++)
+            inflate(arr[i], output, cache, ctx);
           break;
         }
         case isView(input): {
           output.push(VIEW);
-          inflate(toTag(input), output, cache);
+          inflate(toTag(input), output, cache, ctx);
           input = (input as ArrayBufferView).buffer;
           if (!process(input, output, cache)) break;
           // 폴스루 — 뷰의 내부 버퍼가 새 참조면 아래 ArrayBuffer 분기로
@@ -124,48 +138,49 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
         case input instanceof ArrayBuffer: {
           const ui8a = new Uint8Array(input as ArrayBufferLike);
           set(output, BUFFER, ui8a.length);
-          pushView(output as Stack, ui8a);
+          ctx.pushView(output as Stack, ui8a);
           break;
         }
         case input instanceof Date:
           output.push(DATE);
-          inflate((input as Date).getTime(), output, cache);
+          inflate((input as Date).getTime(), output, cache, ctx);
           break;
         case input instanceof Map: {
           const m = input as Map<unknown, unknown>;
           set(output, MAP, m.size);
           for (const [key, value] of m) {
-            inflate(key, output, cache);
-            inflate(value, output, cache);
+            inflate(key, output, cache, ctx);
+            inflate(value, output, cache, ctx);
           }
           break;
         }
         case input instanceof Set: {
           const s = input as Set<unknown>;
           set(output, SET, s.size);
-          for (const value of s) inflate(value, output, cache);
+          for (const value of s) inflate(value, output, cache, ctx);
           break;
         }
         case input instanceof Error: {
           const err = input as Error;
           output.push(ERROR);
-          inflate(err.name, output, cache);
-          inflate(err.message, output, cache);
-          inflate(err.stack, output, cache);
+          inflate(err.name, output, cache, ctx);
+          inflate(err.message, output, cache, ctx);
+          inflate(err.stack, output, cache, ctx);
           break;
         }
         /* c8 ignore start */
         case input instanceof ImageData: {
           const img = input as ImageData;
           output.push(IMAGE_DATA);
-          inflate(img.data, output, cache);
-          inflate(img.width, output, cache);
-          inflate(img.height, output, cache);
-          inflate(img.colorSpace, output, cache);
+          inflate(img.data, output, cache, ctx);
+          inflate(img.width, output, cache, ctx);
+          inflate(img.height, output, cache, ctx);
+          inflate(img.colorSpace, output, cache, ctx);
           inflate(
             (img as unknown as { pixelFormat?: unknown }).pixelFormat,
             output,
             cache,
+            ctx,
           );
           break;
         }
@@ -173,15 +188,15 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
         case input instanceof RegExp: {
           const re = input as RegExp;
           output.push(REGEXP);
-          inflate(re.source, output, cache);
-          inflate(re.flags, output, cache);
+          inflate(re.source, output, cache, ctx);
+          inflate(re.flags, output, cache, ctx);
           break;
         }
         case input instanceof File: {
           const file = input as File;
           output.push(FILE);
-          inflate(file.name, output, cache);
-          inflate(file.lastModified, output, cache);
+          inflate(file.name, output, cache, ctx);
+          inflate(file.lastModified, output, cache, ctx);
           // 폴스루 — File은 Blob이기도 하므로 이어서 BLOB 데이터까지
           // 기록한다.
         }
@@ -189,13 +204,14 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
           const blob = input as Blob;
           const size = blob.size;
           output.push(BLOB);
-          inflate(blob.type, output, cache);
-          inflate(size, output, cache);
+          inflate(blob.type, output, cache, ctx);
+          inflate(size, output, cache, ctx);
           // 실제 바이트는 아직 없으니 자리(0으로 채운 자리표시자)만 미리
-          // 차지해 두고, blobs 큐 처리 시 이 위치(length)에 덮어쓴다.
+          // 차지해 두고, 이 호출의 ctx.blobs 처리 시 이 위치(length)에
+          // 덮어쓴다.
           const length = output.length;
-          pushView(output as Stack, new Uint8Array(size));
-          blobs.push(
+          ctx.pushView(output as Stack, new Uint8Array(size));
+          ctx.blobs.push(
             blob
               .arrayBuffer()
               .then((buffer) => [length, buffer] as [number, ArrayBuffer]),
@@ -207,18 +223,19 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
           // 키/값 쌍을 OBJECT로 기록한다.
           if (input !== null && "toJSON" in (input as object)) {
             const json = (input as { toJSON(): unknown }).toJSON();
-            inflate(json === input ? null : json, output, cache);
+            inflate(json === input ? null : json, output, cache, ctx);
           } else {
             const keys = ownKeys(input as object);
             const length = keys.length;
             set(output, OBJECT, length);
             for (let i = 0; i < length; i++) {
               const key = keys[i]!;
-              inflate(key, output, cache);
+              inflate(key, output, cache, ctx);
               inflate(
                 (input as Record<PropertyKey, unknown>)[key],
                 output,
                 cache,
+                ctx,
               );
             }
           }
@@ -233,7 +250,7 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
       if (process(input, output, cache)) {
         const encoded = textEncoder.encode(input);
         set(output, STRING, encoded.length);
-        pushView(output as Stack, encoded);
+        ctx.pushView(output as Stack, encoded);
       }
       break;
     }
@@ -243,7 +260,7 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
     }
     case "symbol": {
       output.push(SYMBOL);
-      inflate(toSymbol(input), output, cache);
+      inflate(toSymbol(input), output, cache, ctx);
       break;
     }
     case "bigint": {
@@ -276,24 +293,18 @@ const inflate = (input: unknown, output: Output, cache: Cache): void => {
   }
 };
 
-// Blob/File은 실제 바이트를 비동기로 읽어야 해서, 그 결과를 나중에 한 번에
-// 채워 넣기 위해 모아두는 큐.
-const blobs: Promise<[number, ArrayBuffer]>[] = [];
-
-/**
- * encode()는 일반 배열에, encoder()는 Stack(또는 서브클래스) 버퍼에 바로
- * 쓴다 — 호출 시점에 맞는 push 구현으로 교체해서 쓴다.
- */
-let pushView: (output: Stack, value: Uint8Array) => void = push as unknown as (
-  output: Stack,
-  value: Uint8Array,
-) => void;
-
-/** 값을 일반 number 배열로 인코딩한다. */
+/** 값을 일반 number 배열로 인코딩한다. Blob/File은 지원하지 않는다 — 필요하면 encoder()를 쓴다. */
 export const encode = (value: unknown): number[] => {
   const output: number[] = [];
-  pushView = push as unknown as (output: Stack, value: Uint8Array) => void;
-  inflate(value, output as unknown as Output, new Map());
+  const ctx: Ctx = { blobs: [], pushView: push as unknown as PushView };
+  inflate(value, output as unknown as Output, new Map(), ctx);
+  if (ctx.blobs.length)
+    // ADR-0002와 같은 원칙 — 지원하지 않는 능력은 진단 가능한 에러로
+    // 알린다. encode()는 동기 배열만 반환하는 interface라 Blob/File의
+    // 비동기 바이트를 채워 넣을 자리가 없다.
+    throw new Error(
+      "encode()는 Blob/File을 지원하지 않는다 — 대신 encoder()를 쓴다.",
+    );
   return output;
 };
 
@@ -309,15 +320,15 @@ export const encoder =
   }: { byteOffset?: number; Array?: T } = {}) =>
   (value: unknown, buffer: ArrayBufferLike): number | Promise<number> => {
     const output = new ArrayClass(buffer, byteOffset);
-    pushView = ArrayClass.push as unknown as (
-      output: Stack,
-      value: Uint8Array,
-    ) => void;
-    inflate(value, output as unknown as Output, new Map());
+    const ctx: Ctx = {
+      blobs: [],
+      pushView: ArrayClass.push as unknown as PushView,
+    };
+    inflate(value, output as unknown as Output, new Map(), ctx);
     const length = output.length;
     output.sync(true);
-    return blobs.length
-      ? Promise.all(blobs.splice(0)).then((entries) => {
+    return ctx.blobs.length
+      ? Promise.all(ctx.blobs).then((entries) => {
           // 대기 중이던 Blob/File 바이트를 앞서 예약해 둔 위치에 채운다.
           const ui8a = new Uint8Array(buffer, byteOffset);
           for (const [len, buff] of entries)

@@ -259,6 +259,33 @@ describe("direct 코덱: Blob/File (test/blob.js 이식)", () => {
     expect(decoded[0]).toBe("a");
     expect(decoded[2]).toBe("c");
   });
+
+  it("encode()에 Blob을 넘기면 throw한다 — Blob/File은 encoder()만 지원한다", () => {
+    const blob = new Blob(["leak"], { type: "text/plain" });
+    expect(() => encode(["before", blob, "after"])).toThrow();
+  });
+
+  it("Blob이 섞인 encode() 시도 직후의 무관한 encoder() 호출이 오염되지 않는다 (회귀 — card 2)", async () => {
+    const blob = new Blob(["leak"], { type: "text/plain" });
+
+    // call A — Blob이 섞인 값을 encode()에 넘긴다. 실패하더라도 이후 호출에
+    // 아무 흔적도 남기지 않아야 한다.
+    try {
+      encode(["before", blob, "after"]);
+    } catch {
+      /* 기대된 실패 — 위 테스트에서 별도로 검증한다 */
+    }
+
+    // call B — call A와 무관한 값을 encoder()로 인코딩한다. call A가 모듈
+    // 상태에 미해결 Promise를 남겼다면 call B가 그 바이트를 엉뚱한
+    // offset으로 가로채 자신의 버퍼를 오염시킨다.
+    const encB = encoder();
+    const decB = decoder();
+    const bufB = new SharedArrayBuffer(8, { maxByteLength: 64 });
+    const lengthB = await encB(["unrelated", "value"], bufB);
+
+    expect(decB(lengthB as number, bufB)).toEqual(["unrelated", "value"]);
+  });
 });
 
 describe("direct 코덱: 신뢰할 수 없는 바이트에 대한 클래스 이름 allowlist", () => {
