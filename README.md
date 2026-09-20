@@ -22,7 +22,7 @@ pnpm install
 pnpm build         # 전체 워크스페이스 빌드
 pnpm test          # @cp949/runo-reflected-ffi 테스트
 pnpm check-types   # 전체 워크스페이스 타입 체크
-pnpm --filter demo dev   # 데모 앱 개발 서버
+pnpm demo          # 데모 앱 개발 서버
 ```
 
 프로젝트 고유 용어는 `CONTEXT.md`, 아키텍처 결정과 이유는 `docs/adr/` 참고.
