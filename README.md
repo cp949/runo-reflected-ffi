@@ -15,6 +15,20 @@ Giammarchi, MIT)를 TypeScript로 포팅한 모노레포.
   브라우저에서 보여주는 Vite + vanilla TS 데모.
 - `packages/eslint-config`, `packages/typescript-config` — 공유 lint/tsconfig 설정.
 
+## 원본과 다른 점
+
+- 소스: 원본(`reflected-ffi` 0.7.2)은 JSDoc 주석 + `tsc --allowJs --checkJs`로
+  `.d.ts`만 별도 생성하는 순수 JS다. 이 포트는 `packages/reflected-ffi/src/`를
+  실제 TypeScript로 재작성했다.
+- 테스트: 원본은 `c8 node --expose-gc test/index.js` 커스텀 러너를 쓴다. 이
+  포트는 Vitest로 옮기고 테스트를 트랩/모듈 단위 파일로 재구성했다
+  (`packages/reflected-ffi/test/*.test.ts`).
+- Python 바인딩(원본의 `python/`, PyPI 패키지 `reflected_ffi`)은 포함하지
+  않는다 — 이 포트는 JS/TS 전용이다.
+- 런타임 동작 차이(보안 수정, breaking wire 포맷 변경 등)는
+  [`packages/reflected-ffi/README.md`](./packages/reflected-ffi/README.md)와
+  `docs/adr/`에 정리돼 있다.
+
 ## 개발
 
 ```bash
