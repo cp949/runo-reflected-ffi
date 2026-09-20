@@ -3,6 +3,7 @@
 // 함께 처리한다.
 
 import { encoder } from "@cp949/runo-reflected-ffi/encoder";
+import { GET } from "@cp949/runo-reflected-ffi/traps";
 import nextResolver from "./next-resolver";
 import { PAYLOAD_BYTE_OFFSET } from "./protocol";
 
@@ -35,6 +36,16 @@ export function createMainBridge(
   // worker의 동기 reflect 호출 결과를 공유 버퍼의 payload 영역에 인코딩한다.
   const encode = encoder({ byteOffset: PAYLOAD_BYTE_OFFSET });
 
+  // 인코딩 길이를 공유 버퍼에 쓰고 Atomics.notify로 worker의 Atomics.wait를
+  // 깨운다. Blob/File 바이트가 버퍼에 채워지기 *전에* 이 함수를 부르면 worker가
+  // 미완성 데이터를 읽으므로, encode(...)가 Promise를 반환하는 동안은 호출하지
+  // 않는다(resolve/reject 이후에만 부른다).
+  const notify = (i32a: Int32Array, length: number): void => {
+    i32a[1] = length;
+    i32a[0] = 1;
+    Atomics.notify(i32a, 0);
+  };
+
   // worker가 보낸 메시지를 종류별로 분기해 처리한다.
   worker.onmessage = ({ data }: MessageEvent) => {
     if (!Array.isArray(data)) {
@@ -54,10 +65,27 @@ export function createMainBridge(
     const i32a = first;
     const result = deps.reflect(...(args as Parameters<Reflect>));
     // method가 UNREF(0)면 worker가 응답을 기다리지 않으므로 쓰지 않는다.
-    if (args[0]) {
-      i32a[1] = encode(result, i32a.buffer) as number;
-      i32a[0] = 1;
-      Atomics.notify(i32a, 0);
+    if (!args[0]) return;
+    const encoded = encode(result, i32a.buffer);
+    if (encoded instanceof Promise) {
+      // result에 Blob/File이 섞이면 encode()가 바이트를 다 채운 뒤에야
+      // 끝나는 Promise를 돌려준다 — resolve될 때까지 notify를 미룬다.
+      encoded.then(
+        (length) => notify(i32a, length),
+        (err: unknown) => {
+          // Blob/File 바이트 읽기 실패. worker의 Atomics.wait는 타임아웃이
+          // 없어 notify를 안 보내면 워커 스레드가 영구 정지하므로, 실패도
+          // 반드시 notify한다. GET의 응답 슬롯은 [cache, value] 2-tuple이어야
+          // 구조분해가 성공하고(remote.ts의 Handler#get), 그 외(APPLY 등)는
+          // remote.ts의 fromValue가 배열이 아닌 값을 그대로 통과시키므로
+          // (isArray 검사 실패 시 원값 반환) 감싸지 않는다.
+          const error = err instanceof Error ? err : new Error(String(err));
+          const payload = args[0] === GET ? [false, error] : error;
+          notify(i32a, encode(payload, i32a.buffer) as number);
+        },
+      );
+    } else {
+      notify(i32a, encoded);
     }
   };
 
