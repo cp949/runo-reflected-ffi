@@ -13,37 +13,93 @@
   "publishConfig": {
     "access": "public"
   },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./package.json": "./package.json",
-    "./types": { "types": "./dist/types.d.ts", "import": "./dist/types.js" },
-    "./traps": { "types": "./dist/utils/traps.d.ts", "import": "./dist/traps.js" },
-    "./utils": { "types": "./dist/utils/index.d.ts", "import": "./dist/utils/index.js" },
-    "./utils/symbol": { "types": "./dist/utils/symbol.d.ts", "import": "./dist/utils/symbol.js" },
-    "./utils/global": { "types": "./dist/utils/global.d.ts", "import": "./dist/utils/global.js" },
-    "./query": { "types": "./dist/utils/query.d.ts", "import": "./dist/query.js" },
-    "./gather": { "types": "./dist/utils/gather.d.ts", "import": "./dist/gather.js" },
-    "./to-json-callback": { "types": "./dist/utils/to-json-callback.d.ts", "import": "./dist/to-json-callback.js" },
-    "./utils/heap": { "types": "./dist/utils/heap.d.ts", "import": "./dist/utils/heap.js" },
-    "./utils/events": { "types": "./dist/utils/events.d.ts", "import": "./dist/utils/events.js" },
-    "./array": { "types": "./dist/direct/array.d.ts", "import": "./dist/array.js" },
-    "./buffer": { "types": "./dist/direct/buffer.d.ts", "import": "./dist/buffer.js" },
-    "./decoder": { "types": "./dist/direct/decoder.d.ts", "import": "./dist/decoder.js" },
-    "./encoder": { "types": "./dist/direct/encoder.d.ts", "import": "./dist/encoder.js" },
-    "./direct": { "types": "./dist/direct/index.d.ts", "import": "./dist/direct/index.js" },
-    "./local": { "types": "./dist/local.d.ts", "import": "./dist/local.js" },
-    "./remote": { "types": "./dist/remote.d.ts", "import": "./dist/remote.js" }
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./traps": {
+      "types": "./dist/utils/traps.d.ts",
+      "import": "./dist/traps.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
+    },
+    "./utils/symbol": {
+      "types": "./dist/utils/symbol.d.ts",
+      "import": "./dist/utils/symbol.js"
+    },
+    "./utils/global": {
+      "types": "./dist/utils/global.d.ts",
+      "import": "./dist/utils/global.js"
+    },
+    "./query": {
+      "types": "./dist/utils/query.d.ts",
+      "import": "./dist/query.js"
+    },
+    "./gather": {
+      "types": "./dist/utils/gather.d.ts",
+      "import": "./dist/gather.js"
+    },
+    "./to-json-callback": {
+      "types": "./dist/utils/to-json-callback.d.ts",
+      "import": "./dist/to-json-callback.js"
+    },
+    "./utils/heap": {
+      "types": "./dist/utils/heap.d.ts",
+      "import": "./dist/utils/heap.js"
+    },
+    "./utils/events": {
+      "types": "./dist/utils/events.d.ts",
+      "import": "./dist/utils/events.js"
+    },
+    "./array": {
+      "types": "./dist/direct/array.d.ts",
+      "import": "./dist/array.js"
+    },
+    "./buffer": {
+      "types": "./dist/direct/buffer.d.ts",
+      "import": "./dist/buffer.js"
+    },
+    "./decoder": {
+      "types": "./dist/direct/decoder.d.ts",
+      "import": "./dist/decoder.js"
+    },
+    "./encoder": {
+      "types": "./dist/direct/encoder.d.ts",
+      "import": "./dist/encoder.js"
+    },
+    "./direct": {
+      "types": "./dist/direct/index.d.ts",
+      "import": "./dist/direct/index.js"
+    },
+    "./local": {
+      "types": "./dist/local.d.ts",
+      "import": "./dist/local.js"
+    },
+    "./remote": {
+      "types": "./dist/remote.d.ts",
+      "import": "./dist/remote.js"
+    }
   },
   "scripts": {
     "build": "vite build",
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "test:dist": "vitest run test/dist-smoke.test.ts",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "release": "GITHUB_TOKEN=$(gh auth token) release-it"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "eslint": "10.11.0",
+    "release-it": "^21.1.0",
     "typescript": "7.0.2",
     "vite": "^8.3.0",
     "vite-plugin-dts": "^5.1.0",

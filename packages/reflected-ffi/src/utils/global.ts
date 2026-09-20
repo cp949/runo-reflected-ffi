@@ -67,9 +67,12 @@ export const resolveViewClass = (
 ): new (...args: any[]) => ArrayBufferView => {
   if (!VIEW_CLASSES.has(name))
     throw new Error(`reflected-ffi: unsupported view class "${name}"`);
-  return (globalThis as unknown as Record<string, new (...args: any[]) => ArrayBufferView>)[
-    name
-  ]!;
+  return (
+    globalThis as unknown as Record<
+      string,
+      new (...args: any[]) => ArrayBufferView
+    >
+  )[name]!;
 };
 
 /** 허용 목록에 있는 이름이면 해당 Error 서브클래스를, 아니면 기본 `Error`를 반환한다. */

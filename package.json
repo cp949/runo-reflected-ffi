@@ -8,7 +8,8 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "release": "pnpm --filter @cp949/runo-reflected-ffi release"
   },
   "devDependencies": {
     "@typescript/typescript6": "^6.0.2",
