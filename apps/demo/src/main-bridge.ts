@@ -32,7 +32,7 @@ export function createMainBridge(
   },
 ): MainBridge {
   // sendAsync로 보낸 요청(id)별로 응답 Promise를 관리한다.
-  const [next, resolve] = nextResolver();
+  const [next, settle] = nextResolver();
   // worker의 동기 reflect 호출 결과를 공유 버퍼의 payload 영역에 인코딩한다.
   const encode = encoder({ byteOffset: PAYLOAD_BYTE_OFFSET });
 
@@ -46,6 +46,19 @@ export function createMainBridge(
     Atomics.notify(i32a, 0);
   };
 
+  // worker-bridge.ts가 async reflect 실패를 왕복시킬 때 쓰는 {name, message,
+  // stack} 평범한 객체를 Error 인스턴스로 되살린다 — 이 채널은 postMessage
+  // 구조적 복제에 기대므로, floor(Chrome 84/Firefox 79, ADR-0001)에서
+  // 보장되지 않는 네이티브 Error 클론에 기대지 않는다.
+  const toError = (payload: unknown): Error => {
+    const { name, message, stack } = payload as {
+      name?: string;
+      message?: string;
+      stack?: string;
+    };
+    return Object.assign(new Error(message), { name, stack });
+  };
+
   // worker가 보낸 메시지를 종류별로 분기해 처리한다.
   worker.onmessage = ({ data }: MessageEvent) => {
     if (!Array.isArray(data)) {
@@ -54,14 +67,18 @@ export function createMainBridge(
       if (status?.type === "status") deps.onStatus(String(status.text));
       return;
     }
-    const [first, args] = data as [Int32Array | number, unknown[]];
+    const [first] = data as [Int32Array | number, ...unknown[]];
     if (typeof first === "number") {
-      // 첫 요소가 숫자(id)면 sendAsync로 보낸 비동기 요청의 응답이다.
-      resolve(first, args);
+      // 첫 요소가 숫자(id)면 sendAsync로 보낸 비동기 요청의 응답이다 —
+      // worker-bridge.ts가 [id, ok, payload]로 보낸다(ok=false면 payload는
+      // 위 {name, message, stack} 모양).
+      const [, ok, payload] = data as [number, boolean, unknown];
+      settle(first, ok, ok ? payload : toError(payload));
       return;
     }
     // 그 외에는 worker가 동기로 건 reflect 호출이다 — 결과를 처리한 뒤
     // 공유 버퍼에 써서 Atomics.notify로 worker의 Atomics.wait를 깨운다.
+    const [, args] = data as [Int32Array, unknown[]];
     const i32a = first;
     const result = deps.reflect(...(args as Parameters<Reflect>));
     // method가 UNREF(0)면 worker가 응답을 기다리지 않으므로 쓰지 않는다.
